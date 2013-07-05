@@ -1,0 +1,12 @@
+name = ADD Block 
+description = Add Block to a region of a page output based on configurable rules
+core = 7.x
+
+configure = admin/config/content/add-block
+
+dependencies[] = ctools
+
+version = "7.x-1.0"
+core = "7.x"
+project = "add_block"
+

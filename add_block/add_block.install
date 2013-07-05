@@ -1,0 +1,154 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions for the add_block module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function add_block_install() {
+  $t = get_t();
+  drupal_set_message(
+    $t(
+      'Add block module succesfully installed. Visit the <a href="@link">configuration page</a>.',
+      array(
+        '@link' => url('admin/config/content/add-block/configuration'),
+      )
+    )
+  );
+}
+
+/**
+ * @file add_block.install
+ *
+ * Install, update and uninstall functions for the add_block module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function add_block_schema() {
+  $schema['add_block_rule'] = array(
+    'description' => t('Table storing ADD block rule definitions.'),
+    'export' => array(
+      'key' => 'name',
+      'primary key' => 'id',
+      'identifier' => 'rule', // Exports will be defined as $rule
+      'default hook' => 'add_block_rule',
+      'save callback' => 'add_block_rule_save',
+      'delete callback' => 'add_block_rule_delete',
+      'api' => array(
+        'owner' => 'add_block',
+        'api' => 'add_block_rules',  // Base name for api include files.
+        'minimum_version' => 1,
+        'current_version' => 1,
+      ),
+    ),
+    'fields' => array(
+      'name' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'Unique ID for rules. Used to identify them programmatically.',
+      ),
+      'id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The primary identifier for the block injection rule',
+        'no export' => TRUE, // do not export database-only keys.
+      ),
+      'description' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'A human readable name of a rule.',
+      ),
+      'block' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'description' => 'The actual block code.',
+      ),
+      'region' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'The region of block on the page (e.g. header or footer).',
+      ),
+      'page_visibility' => array(
+        'description' => 'Boolean indicating whether the rule has a white or black list for page visibility.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'page_visibility_pages' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'description' => 'A list of pages to either hide or show the JavaScript.',
+      ),
+	'code_visibility' => array(
+        'description' => 'Boolean indicating whether the block code enable or disable.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+		'size' => 'tiny',
+      ),	
+    ),
+    'primary key' => array('id'),
+  );
+  return $schema;
+}
+
+/**
+ * Adding visibility field.
+ */
+function add_block_update_7000() {
+  // Add the visibility field to the db.
+  if (!db_field_exists('add_block_rule', 'visibility')) {
+    db_add_field('add_block_rule', 'visibility',
+      array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+        'size' => 'tiny',
+      )
+    );
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * This is required to cleanup the left over files
+ */
+function add_block_uninstall() {
+  ctools_include('export');
+  $rules = ctools_export_load_object('add_block_rule');
+  foreach ($rules as $name => $rule) {
+    file_unmanaged_delete(_add_block_rule_path($rule->id));
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ *
+ * We'll use this to prevent installation of the module if the file directory
+ * is not available and writable.
+ */
+function add_block_requirements($phase) {
+  $requirements = array();
+  if ($phase == 'runtime') {
+    $requirements['add_block_cache_dir'] = array(
+      'title' => t('ADD block cache dir'),
+      'severity' => REQUIREMENT_OK,
+      'value' => t('Exists'),
+    );
+
+    $path = 'public://add_block';
+    if (!file_prepare_directory($path, FILE_CREATE_DIRECTORY)) {
+      $requirements['add_block_cache_dir']['description'] = t('The ADD block cache directory, %path could not be created due to a misconfigured files directory. Please ensure that the files directory is correctly configured and that the webserver has permission to create directories.', array('%path' => file_uri_target($path)));
+      $requirements['add_block_cache_dir']['severity'] = REQUIREMENT_ERROR;
+      $requirements['add_block_cache_dir']['value'] = t('Unable to create');
+    }
+  }
+
+  return $requirements;
+}
