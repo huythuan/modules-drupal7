@@ -1,0 +1,5 @@
+name = Marketplace RSS Parser
+description = Parse Marketplace RSS Feed and store to the database.
+core = 7.x
+package = Custom
+dependencies[] = ctools

@@ -1,0 +1,90 @@
+<?php
+global $marketplace_parser_first_time;
+/**
+ * Created by Thuan Nguyen.
+ * User: thuannguyen
+ * Date: May 22, 2013
+ * Time: 2:15pm
+ */
+/**
+ * Implementation of hook_cron().
+ */
+function marketplace_parser_cron() {
+
+	marketplace_parser_update_rss();
+}
+
+/**
+ * Parse RSS feed from norcalmarketplace.com and store data to the database.
+ */
+function marketplace_parser_update_rss(){	
+	$url = "http://www.norcalmarketplace.com/frss";
+	$xml = simplexml_load_file($url);
+	//check to see there is data in the table
+	$result = db_select('marketplace_parser_rule', 'm')
+	    ->fields('m')
+	    ->execute()
+	    ->fetchAll();
+	$total_record = count($result);
+
+	if($xml!=FALSE){//check to see loading xml success
+		$num_deleted = db_delete('marketplace_parser_rule') // delete old data
+		  ->execute(); 
+		$j = 0;
+	while ($xml->channel->item[$j]->title !=''){	
+		$record['id'] = $j+1;
+		$record['title'] = $xml->channel->item[$j]->title;
+		$record['description'] = $xml->channel->item[$j]->description;	
+		$record['business_id'] = $xml->channel->item[$j]->id;
+		$record['phone'] = $xml->channel->item[$j]->phone;
+		$record['link'] = $xml->channel->item[$j]->link;
+		drupal_write_record('marketplace_parser_rule', $record); 	
+		$j = $j + 1;
+		}
+	}
+}
+function marketplace_parser_init(){
+	
+}
+function marketplace_parser_page_build(&$page) {	
+	if(drupal_is_front_page()){// show only on the front page
+	$num_feature = 2;
+	$results = db_select('marketplace_parser_rule', 'm')
+	    ->fields('m')
+	    ->execute()
+	    ->fetchAll();
+	$total_record = count($results);
+	if($total_record > 0){
+		$tmp = array();
+		foreach ($results as $result){
+			$tmp[] = $result;
+	        }
+	    $list = array_rand($tmp,1); //get random one business to display on the news site
+		$block = '<div>';
+		$block .= '<hr style="color: white;background-color: white;">';
+		$block .= '<div>';
+		$block .= '<h2 class="block-title">LOCAL BUSINESS</h2>';
+		$block .= '</div>';
+		$block .= '<div class="more-link"><a target="_blank" href="http://www.norcalmarketplace.com">VIEW ALL LOCAL BUSINESSES</a></div>';	
+		$block .= '<div class="banner-edge"></div>';
+		//$block .= '<a  href= http://www.norcalmarketplace.com><img src="'.drupal_get_path('module', 'marketplace_parser').'/marketplace_logo.png" width=200px height=50px '.'alt="Norcal Marketplace" title="norcalmarketplace"></a>';
+			$block .= '<div>';
+			$block .= '<a target="_blank" href='.'"'.$tmp[$list]->link.'">'.$tmp[$list]->title.'</a>';
+			$block .= "</div>";
+			$block .= "<div>";
+			$block .= '<p style="font-size: 12px">Phone Number: '.$tmp[$list]->phone.'</p>';
+			$block .= "</div>";
+			$block .= "<div>";
+			$block .= '<p style="font-size: 12px">'.substr($tmp[$list]->description,0,500).'<span class="field-content"><a target="_blank" href="'.$tmp[$list]->link.'"> Read More '. $tmp[$list]->title.' &gt;&gt;</a></span></p>';
+			$block .= "</div>";
+
+		$block .= '<hr style="color: #efefef;background-color: #efefef;">';
+		$block .= "</div>";
+     }
+
+     $page['content_bottom']['marketplace'] = array(
+      '#markup' => $block, 
+      '#weight' => 10,
+	          );
+	}
+}

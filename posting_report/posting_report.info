@@ -1,0 +1,7 @@
+name = Posting Report
+description =  Build reporting view that shows Dashboard of each reporter and the number of posts today, this week, this month.
+package = Custom
+core = 7.x
+version = "7.x-1.0"
+core = "7.x"
+

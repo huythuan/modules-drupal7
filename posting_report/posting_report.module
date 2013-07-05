@@ -1,0 +1,323 @@
+<?php
+/**
+ * @file
+ * Main module file for posting report module.
+ * View number of posts contributed current day, current week, current month by each reporter, anh Thuan yeu em Loi.
+ * Author: Thuan Nguyen
+ *Apr 2013
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function posting_report_permission() {
+  return array(
+    'view posting report' => array(
+      'title' => t('View posting report'),
+      'description' => t('Access posting report statistics.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function posting_report_menu() {
+  $items['admin/workbench/posting-report'] = array(
+    'title' => 'Report',
+    'description' => 'View the number of posts today, this week, this month of the reporter.',
+    'page callback' => 'posting_report_show_count',
+    'access arguments' => array('view posting report'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Create table of posting report for each reporter.
+ *
+ * @return String
+ *   A themed HTML table of posting report data
+ *
+ */
+function posting_report_show_count() {
+
+	 //day start of week
+	$day = date('w');
+	$day_week_start = strtotime(date('Y-m-d', strtotime('-'.$day.' days')));
+	//day start of day
+	$start_day= date('Y-m-d');
+	$day_start_day = strtotime($start_day);
+	//day start of month
+	$day_start_month = strtotime(date('Y-m-01'));
+	  
+	$rows = array();
+//count nodes based on uploaded
+  $posts = db_query('SELECT n.created,n.uid, u.name FROM {node} AS n, {users} AS u WHERE u.uid=n.uid AND u.uid =:uid AND n.created >= :ncreated', array(':uid' => $GLOBALS['user']->uid,':ncreated'=> $day_start_month,));
+  foreach ($posts as $post) {
+    $id = 'uploaded';
+    if (!isset($rows[$id])) {
+      $rows[$id]['id'] = $id;
+      $rows[$id]['day_posts'] = 0;
+      $rows[$id]['week_posts'] = 0;
+      $rows[$id]['month_posts'] = 0;
+    }
+	//count munber posts this week
+	if($post->created >= $day_week_start){
+		$rows[$id]['week_posts']++;
+	}
+	//count munber posts today
+	if($post->created >= $day_start_day){
+		$rows[$id]['day_posts']++;
+	}
+	//count munber posts this month
+    $rows[$id]['month_posts']++;
+  
+  }
+//count nodes based on byline
+$posts = db_query('SELECT n.created, s.field_staff_member_uid FROM {node} AS n, {field_data_field_staff_member} AS s WHERE n.nid=s.entity_id AND s.field_staff_member_uid =:uid AND n.created >= :ncreated', array(':uid' => $GLOBALS['user']->uid,':ncreated'=> $day_start_month,));
+  foreach ($posts as $post) {
+    $id = 'byline';
+    if (!isset($rows[$id])) {
+      $rows[$id]['id'] = $id;
+      $rows[$id]['day_posts'] = 0;
+      $rows[$id]['week_posts'] = 0;
+      $rows[$id]['month_posts'] = 0;
+    }
+	//count munber posts this week
+	if($post->created >= $day_week_start){
+		$rows[$id]['week_posts']++;
+	}
+	//count munber posts today
+	if($post->created >= $day_start_day){
+		$rows[$id]['day_posts']++;
+	}
+	//count munber posts this month
+    $rows[$id]['month_posts']++;
+  
+  }  
+
+  $header = array(
+    array('data' => '', 'field' => 'id'),
+    array('data' => 'Number of posts today ('.date('m/d/Y').')', 'field' => 'day_posts'),
+    array('data' => 'Number of posts this week ('.date('m/d', strtotime('-'.$day.' days')).'-'.date('m/d', strtotime('+'.$day.' days')).')', 'field' => 'week_posts'),
+    array('data' => 'Number of posts this month ('.date('m/Y').')', 'field' => 'month_posts'),
+  );
+
+  $vars = array(
+    'header' => $header,
+    'rows' => $rows,
+    'attributes' => array(
+      'id' => 'posting_report',
+      'class' => array('tablesorter'),
+    ),
+	"empty" => t("You don't have any  post today, this week, this month!") // The message to be displayed if table is empty
+  );
+  $report = "<h2 style='text-align:center; margin:50px 0;text-decoration:underline;'>Report for: ".$GLOBALS['user']->name." | id:".$GLOBALS['user']->uid. " | today: ". date('m/d/Y')."</h2>";
+  $thank = "<h2 style='text-align:center; margin-top: 50px;text-decoration:underline;'> Thank you</h2>";
+$reporters = posting_report_reporters_count();
+  $output = $report. theme('table', $vars).$reporters;
+	
+
+  return $output;
+}
+
+
+
+/**
+ *
+ * @return Arrray
+ *   Get the number of post today, this week, this month uploaded and found in byline for reporters.
+ *
+ */
+function posting_report_reporters_count() {
+
+	//day start of week
+	$day = date('w');
+	$day_week_start = strtotime(date('Y-m-d', strtotime('-'.$day.' days')));
+	//day start of day
+	$start_day= date('Y-m-d');
+	$day_start_day = strtotime($start_day);
+	//day start of month
+	$day_start_month = strtotime(date('Y-m-01'));
+	
+	// Check if there is sorting request
+	  if(isset($_GET['sort']) && isset($_GET['order'])){
+	    // Sort it Ascending or Descending?
+	    if($_GET['sort'] == 'asc')
+	      $sort = 'ASC';
+	    else
+	      $sort = 'DESC';
+
+	    // Which column will be sorted
+	    switch($_GET['order']){
+	      case 'Name':
+	        $order = 'name';
+	        break;
+	      case 'ID':
+	        $order = 'uid';
+	        break;
+	      default:
+	        $order = 'uid';
+	    }
+	  }
+	  else{
+	    // Default sort
+	    $sort = 'ASC';
+	    $order = 'uid';
+	  }
+	
+	  
+	$rows = array();
+	//role stringer = 6
+	//role Ad stringer = 8
+	//role reporter = 5
+	// role editor = 4
+//count nodes based on uploaded
+ // $posts = db_query("SELECT u.uid, u.name, u.access, u.status FROM {users} AS u WHERE u.access !='0' AND u.status = '1'");
+ 	$query = db_select("users", "u");
+    $query->join('users_roles', 'r', 'r.uid = u.uid'); //JOIN users with users_roles
+    $query->groupBy('u.uid');//GROUP BY user ID
+	//Select fields
+	 $query->fields("u", array("uid", "name", "access", "status"))
+		   ->condition('u.access', 0, '<>')
+		   ->condition('u.status', 1, '=')
+		   ->condition('r.rid', array(4,5,6,8),'IN');
+	
+	// Set order by
+	  $query->orderBy($order, $sort);		
+ // For pagination
+  $query = $query->extend('TableSort')->extend('PagerDefault')->limit(50);
+// Execute query
+  $posts = $query->execute();
+   $i = 0;
+  foreach ($posts as $post) {
+
+	$tmp = posting_report_upload_count($post->uid);
+	$rows[$i]['id'] = $post->uid;
+	$rows[$i]['name'] = $post->name;
+	$rows[$i]['found'] = 'uploaded';
+	$rows[$i]['day_posts'] = $tmp['day_posts'];
+    $rows[$i]['week_posts'] = $tmp['week_posts'];
+    $rows[$i]['month_posts'] = $tmp['month_posts'];
+	$i = $i + 1;
+	$tmp = posting_report_byline_count($post->uid);
+	$rows[$i]['id'] = '';
+	$rows[$i]['name'] = '';
+	$rows[$i]['found'] = 'byline';
+	$rows[$i]['day_posts'] = $tmp['day_posts'];
+    $rows[$i]['week_posts'] = $tmp['week_posts'];
+    $rows[$i]['month_posts'] = $tmp['month_posts'];
+
+	$i =$i + 1;
+	}
+	
+	$header = array(
+	    array('data' => 'ID', 'field' => 'id'),
+	    array('data' => 'Name', 'field' => 'name'),
+	    array('data' => 'Found In', 'field' => 'found'),
+	    array('data' => 'Number of posts today ('.date('m/d/Y').')', 'field' => 'day_posts'),
+	    array('data' => 'Number of posts this week ('.date('m/d', strtotime('-'.$day.' days')).'-'.date('m/d', strtotime('+'.$day.' days')).')', 'field' => 'week_posts'),
+	    array('data' => 'Number of posts this month ('.date('m/Y').')', 'field' => 'month_posts'),
+	  );
+	  $report = "<h2 style='text-align:center; margin:50px 0;text-decoration:underline;'>Report for other editors/reporters/stringers/advanced stringers | today: ". date('m/d/Y')."</h2>";
+	  // Output of table with the paging
+	  $output = theme_table(
+	    array(
+	      "header" => $header,
+	      "rows" => $rows,
+	      "attributes" => array(),
+	      "sticky" => true, // Table header will be sticky
+	      "caption" => "",
+	      "colgroups" => array(),
+	      "empty" => t("Table has no row!") // The message to be displayed if table is empty
+	    )
+	  ).theme("pager");
+
+	  return $report.$output;
+}
+
+
+/**
+ *
+ * @return Arrray
+ *   Get the number of post today, this week, this month uploaded for a reporter with uid provided
+ *
+ */
+function posting_report_upload_count($uid) {
+	//day start of week
+	$day = date('w');
+	$day_week_start = strtotime(date('Y-m-d', strtotime('-'.$day.' days')));
+	//day start of day
+	$start_day= date('Y-m-d');
+	$day_start_day = strtotime($start_day);
+	//day start of month
+	$day_start_month = strtotime(date('Y-m-01'));	  
+	$rows = array();
+//count nodes based on uploaded
+  $posts = db_query('SELECT n.created,n.uid, u.name FROM {node} AS n, {users} AS u WHERE u.uid=n.uid AND u.uid =:uid AND n.created >= :ncreated', array(':uid' => $uid,':ncreated'=> $day_start_month,));
+	$rows['day_posts'] = 0;
+    $rows['week_posts'] = 0;
+    $rows['month_posts'] = 0;
+  foreach ($posts as $post) {    
+	//count munber posts this week
+	if($post->created >= $day_week_start){
+		$rows['week_posts']++;
+	}
+	//count munber posts today
+	if($post->created >= $day_start_day){
+		$rows['day_posts']++;
+	}
+	//count munber posts this month
+    $rows['month_posts']++;
+  
+  }
+	return $rows;
+}
+	
+
+
+/**
+ *
+ * @return Arrray
+ *   Get the number of post today, this week, this month found in byline for a reporter with uid provided
+ *
+ */
+function posting_report_byline_count($uid) {
+	//day start of week
+	$day = date('w');
+	$day_week_start = strtotime(date('Y-m-d', strtotime('-'.$day.' days')));
+	//day start of day
+	$start_day= date('Y-m-d');
+	$day_start_day = strtotime($start_day);
+	//day start of month
+	$day_start_month = strtotime(date('Y-m-01'));	  
+	$rows = array();
+//count nodes based on uploaded
+  $posts = db_query('SELECT n.created, s.field_staff_member_uid FROM {node} AS n, {field_data_field_staff_member} AS s WHERE n.nid=s.entity_id AND s.field_staff_member_uid =:uid AND n.created >= :ncreated', array(':uid' => $uid,':ncreated'=> $day_start_month,));
+	$rows['day_posts'] = 0;
+    $rows['week_posts'] = 0;
+    $rows['month_posts'] = 0;
+  foreach ($posts as $post) {    
+	//count munber posts this week
+	if($post->created >= $day_week_start){
+		$rows['week_posts']++;
+	}
+	//count munber posts today
+	if($post->created >= $day_start_day){
+		$rows['day_posts']++;
+	}
+	//count munber posts this month
+    $rows['month_posts']++;
+  
+  }
+	return $rows;
+}
+
+
+
+
+
+
+
+

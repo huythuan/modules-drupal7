@@ -1,0 +1,158 @@
+<?php
+/**
+ * Created by Thuan Nguyen.
+ * User: thuannguyen
+ * Date: May 20, 2013
+ * Time: 4:04pm
+ */
+
+/**
+ * Create RSS feed for news
+ */
+/**
+ * Implements hook_menu().
+ */
+function news_rss_menu() {
+  	$menuitems['rss'] = array(
+	    'title' => 'RSS',
+	    'page callback' => 'news_rss_page_callback',
+	    'access callback' => TRUE,
+	    'type' => MENU_CALLBACK,
+  );
+  return $menuitems;
+}
+
+/**
+ * Generates and prints RSS feed for news.
+ */
+function news_rss_page_callback() {
+	global $base_url,$language_content;
+	//looking for domain id
+	switch ($_SERVER['HTTP_HOST'])
+		{
+			case "www.auburnjournal.com":
+					$domain_id = 1;	
+					$domain_name='Auburn Journal';
+				break;
+			case "www.thepresstribune.com":
+					$domain_id = 6;	
+					$domain_name='The Press Tribune';
+				break;		
+			case "www.theloomisnews.com":
+					$domain_id = 3;
+					$domain_name='The Loomis News';	
+				break;
+			case "www.colfaxrecord.com":
+					$domain_id = 2;
+					$domain_name='Colfax Record';	
+				break;
+			case "www.placerherald.com":
+					$domain_id = 4;
+					$domain_name='Placer Herald';	
+				break;
+			case "www.lincolnnewsmessenger.com":
+					$domain_id = 5;	
+					$domain_name='Lincoln News Messenger';
+				break;
+			case "www.folsomtelegraph.com":
+					$domain_id = 7;	
+					$domain_name='Folsom Telegraph';
+				break;
+			case "www.edhtelegraph.com":
+					$domain_id = 8;	
+					$domain_name='El Dorado Telegraph';
+				break;
+			case "www.placersports.com":
+					$domain_id = 9;	
+					$domain_name='Placer Sports';
+				break;
+		}
+	$today = date('Y-m-d');
+	$seven_day_back = strtotime('-7 day'.$today);
+//get story from data base where current domain and day > seven day back
+
+	$query = db_select('node', 'n');
+	$query->condition('n.type','story','=');
+	$query->condition('n.created',$seven_day_back,'>');
+    $query->join('domain_access', 'a', 'n.nid = a.nid');
+	$query->condition('a.gid',$domain_id ,'=');
+	$query->join('field_data_body', 'd', 'n.nid = d.entity_id');
+	$query->groupBy('n.nid');//GROUP BY node ID
+	//Select fields
+    $query->fields("n", array("nid", "title", "created"));
+    $query->fields("d", array("body_value"));
+    $results = $query->execute();
+	$tmp = array();
+	if (count($results) > 0) {
+		foreach ($results as $value) {
+			$id = $value->nid;			   
+			$title = $value->title;
+			$title = strip_tags($title);
+		    $title = preg_replace("/[^A-Z0-9a-z.,\w ]/u", '', $title);
+			$title = trim($title);
+			$date = $value->created;
+			$pubDate = news_rss_unix_timestamp_to_human($date);
+			$url = news_rss_get_link($id); 
+			$description = substr($value->body_value,0,500);
+			$description = strip_tags($description);
+			$description = preg_replace('/ +/', ' ', $description);
+			$description = preg_replace("/[^A-Z0-9a-z.,\w ]/u", '', $description);
+			$description = trim($description);			
+			$xmlBody .= '
+			<item> 	    
+			    <title>' . $title . '</title>
+				<pubDate>' . $pubDate . '</pubDate>
+				<description> '.$description."...".'</description>
+			    <link>' . $url . '</link>			    
+			</item>';
+			}
+		}
+		
+		$channel= array(
+		    'version' => '2.0',
+		    'title' => t('Comments for @site_name', array('@site_name' => variable_get('site_name', 'Drupal'))),
+		    'link' => $base_url,
+		    'description' => t('Comments'),
+		    'language' => $language_content->language,
+		    'generator' => 'http://drupal.org/',
+		  );
+	  	  $output = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n";
+		  $output .= "<rss version=\"" . $channel["version"] . "\" xml:base=\"" . $base_url . "\">\n";
+		  $output .= "<title>".$domain_name."-RSS Feed</title>\n";
+		  $output .= "<link>".$base_url."</link>\n";	
+		  $output .= "<description>Lated News</description>\n";
+		  $output .= "<channel>\n";
+		  $output .= $xmlBody."\n";
+		  $output .= "</channel>\n";
+		  $output .= "</rss>\n";
+
+		  drupal_add_http_header('Content-Type', 'application/rss+xml; charset=utf-8');
+		  print $output;
+	
+}
+
+
+function news_rss_get_link($nid) {
+	global $base_url;
+
+	$query = db_select('url_alias', 'u');
+	$query->condition('u.source','node/'.$nid,'=');
+	$query->fields("u", array("alias"));
+	$results = $query->execute();
+	if (count($results) > 0) {
+		foreach ($results as $value) {
+				return $base_url.'/'.$value->alias;
+			}
+	}
+	return $base_url.'/node/'.$nid.'/';
+
+}
+function news_rss_unix_timestamp_to_human($timestamp = "", $format = 'D d M Y - H:i:s')
+{
+    if (empty($timestamp) || ! is_numeric($timestamp)) $timestamp = time();
+    return ($timestamp) ? date($format, $timestamp) : date($format, $timestamp);
+}
+
+
+
+

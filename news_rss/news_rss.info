@@ -1,0 +1,4 @@
+name = News RSS
+description = RSS for news.
+core = 7.x
+package = Custom

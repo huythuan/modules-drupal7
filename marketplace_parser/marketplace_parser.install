@@ -1,0 +1,124 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions for the marketplace_parser module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function marketplace_parser_install() {
+  $t = get_t();
+  drupal_set_message(
+    $t(
+      'Marketplace parser module succesfully installed.'
+    )
+  );
+}
+
+/**
+ * @file marketplace_parser.install
+ *
+ * Install, update and uninstall functions for the marketplace_parser module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function marketplace_parser_schema() {
+  $schema['marketplace_parser_rule'] = array(
+    'description' => t('Table storing marketplace parser rule definitions.'),
+    'export' => array(
+      'key' => 'name',
+      'primary key' => 'id',
+      'identifier' => 'rule', // Exports will be defined as $rule
+      'default hook' => 'marketplace_parser_rule',
+      'save callback' => 'marketplace_parser_rule_save',
+      'delete callback' => 'marketplace_parser_rule_delete',
+      'api' => array(
+        'owner' => 'marketplace_parser',
+        'api' => 'marketplace_parser_rules',  // Base name for api include files.
+        'minimum_version' => 1,
+        'current_version' => 1,
+      ),
+    ),
+    'fields' => array(
+	'id' => array(
+	     'type' => 'serial',
+	      'unsigned' => TRUE,
+	      'not null' => TRUE,
+	      'description' => 'The primary identifier for the JS injection rule',
+	      'no export' => TRUE, // do not export database-only keys.
+	   ),
+      'title' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'Unique ID for rules. Used to identify them programmatically.',
+      ),
+      
+      'description' => array(
+        'type' => 'text',
+		'size' => 'big',
+        'description' => 'Description of business.',
+      ),
+	  'business_id' => array(
+        'description' => 'Business Id from marketplace.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'phone' => array(
+        'type' => 'text',
+        'size' => 'small',
+        'description' => 'The actual JavaScript code.',
+      ),
+      'link' => array(
+        'type' => 'text',
+         'size' => 'small',
+        'description' => 'Link of a business from norcalmarketplace',
+      ),      
+    ),
+    'primary key' => array('id'),
+  );
+  return $schema;
+}
+
+/**
+ * Adding visibility field.
+ */
+function marketplace_parser_update_7000() {
+  // Add the visibility field to the db.
+  if (!db_field_exists('marketplace_parser_rule', 'visibility')) {
+    db_add_field('marketplace_parser_rule', 'visibility',
+      array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+        'size' => 'tiny',
+      )
+    );
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * This is required to cleanup the left over files
+ */
+function marketplace_parser_uninstall() {
+  ctools_include('export');
+  $rules = ctools_export_load_object('marketplace_parser_rule');
+  foreach ($rules as $name => $rule) {
+    file_unmanaged_delete(_marketplace_parser_rule_path($rule->id));
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ *
+ * We'll use this to prevent installation of the module if the file directory
+ * is not available and writable.
+ */
+function marketplace_parser_requirements($phase) {
+  
+}
