@@ -1,0 +1,335 @@
+<?php
+$block_info =array();
+/**
+ * @file
+ * This module allows users to place JS code to sites and different pages.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function add_js_permission() {
+  return array(
+    'view add js' => array(
+      'title' => t('View add js'),
+    ),
+    'create add js' => array(
+      'title' => t('Create add js'),
+    ),
+    'edit add js' => array(
+      'title' => t('Edit add js'),
+    ),
+    'delete add js' => array(
+      'title' => t('Delete add js'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function add_js_menu() {
+  $items  = array();
+
+  $items['admin/config/content/add-js'] = array(
+    'title' => 'add js',
+    'description' => 'Administer Add JS',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('add_js_list_page_form'),
+    'access arguments' => array('view add js'),
+    'file' => 'add_js.admin.inc',
+  );
+
+  $items['admin/config/content/add-js/list'] = array(
+    'title' => 'List',
+    'description' => 'Add JS',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('add_js_list_page_form'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'file' => 'add_js.admin.inc',
+  );
+
+  $items['admin/config/content/add-js/add']  = array(
+    'title' => 'Add new JS code',
+    'description' => 'Add code',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('add_js_add_form'),
+    'access arguments' => array('create add js'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'add_js.admin.inc',
+  );
+  $items['admin/config/content/add-js/edit/%'] = array(
+    'title' => 'Edit JS code',
+    'description' => 'Code edit',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('add_js_add_form', 5),
+    'access arguments' => array('edit js code'),
+    'type' => MENU_CALLBACK,
+    'file' => 'add_js.admin.inc',
+  );
+
+  $items['admin/config/content/add-js/delete/%'] = array(
+    'title' => 'Are you sure you want to delete this code?',
+    'description' => 'Code delete',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('add_js_del_form', 5),
+    'access arguments' => array('delete js code'),
+    'type' => MENU_CALLBACK,
+    'file' => 'add_js.admin.inc',
+  );
+
+   return $items;
+}
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function add_js_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action js code to 'admin/config/content/add-js/add'
+  // on 'admin/config/content/add-js/list' page.
+  if ($root_path == 'admin/config/content/add-js') {
+    $item = menu_get_item('admin/config/content/add-js/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+/**
+ * Add/Update JS code to DB.
+ */
+function add_js_add_update_code($action, $values, $id = NULL) {
+  if ($action == 'insert') {
+    drupal_write_record('add_js_rule', $values);
+  }
+  elseif ($action == 'update') {
+    $values['id'] = $id;
+    drupal_write_record('add_js_rule', $values, 'id');
+  }
+}
+
+/**
+ * Get JS code from DB.
+ */
+function add_js_get_code($id = NULL, $header = array(), $limit = NULL) {
+  if ($id) {
+    $query = db_select('add_js_rule', 'aj')
+      ->fields('aj')
+      ->condition('id', $id, '=')
+      ->execute()
+      ->fetchAll();
+  }
+  elseif (empty($id) && empty($header) && empty($limit)) {
+    $query = db_select('add_js_rule', 'aj')
+      ->fields('aj')
+      ->execute()
+      ->fetchAll();
+  }
+  else {
+    $query = db_select('add_js_rule', 'aj')
+      ->extend('PagerDefault')
+        ->limit($limit)
+      ->extend('TableSort')
+        ->orderByHeader($header)
+      ->fields('aj')
+      ->execute()
+      ->fetchAll();
+  }
+  $codes = array();
+  if (count($query) > 0) {
+    foreach ($query as $value) {
+      $codes[$value->id] = $value;
+    }
+  }
+  return $codes;
+}
+/**
+ * Delete js code from DB.
+ */
+function add_js_del_code($id) {
+  db_delete('add_js_rule')->condition('id', $id)->execute();
+}
+
+
+
+
+
+
+function add_js_init() {
+  // load all the rules
+
+$content =array();
+
+  
+ctools_include('export');
+  $rules = ctools_export_load_object('add_js_rule');
+
+  foreach ($rules as $name => $rule) {
+	global $test;
+	 
+  	
+	// check if the code visibility is disabled  if so skip it
+		    if ($rule->code_visibility == 0) {
+		      continue;
+		    }
+		if (_add_js_visibility_sites($rule) == FALSE){
+				continue;
+			}
+		
+			if (_add_js_visibility_pages($rule) == FALSE){
+				continue;
+			}
+			if(($rule->add_block == FALSE) && ($rule->add_js == FALSE) ){
+				continue;
+			}
+				// add the js
+			if($rule->add_js == TRUE){
+				    $code = $rule->inline == 1 ? $rule->js : _add_js_rule_path($rule->id);
+				    drupal_add_js($code, array(
+				      'type' => $rule->inline == 1 ? 'inline' : 'file',
+				      'scope' => $rule->position,
+				      // this group has the highest weight
+				      'group' => JS_THEME,
+				      'every_page' => FALSE,
+				      // safe guard to ensure inline files are never preprocessed
+				      'preprocess' => $rule->inline == 1 ? FALSE : $rule->preprocess,
+				      // since we're trying to give the administrator complete control, we'll
+				      // move JS that this module has added to a high weight, higher even than
+				      // the theme's JS files. Currently the weight is 200 + the crid, which is
+				      // currently higher than Bartik's JS.
+				      'weight' => 200 + $rule->id,
+				    ));
+			}
+		//add block to array
+		if($rule->add_block == TRUE){
+			global $block_info;
+			$content=array();
+			$content[0]=$rule->block_content;
+			$content[1]=$rule->block_weight;
+			$content[2]=$rule->block_region;
+			$block_info[]= $content;
+		}
+	
+	
+		
+	}
+	
+	
+}
+
+
+
+/**
+* Based on visibility setting this function returns TRUE if the ADD JS 
+ * rule code should be added to the current site and otherwise FALSE.
+*custom for news site
+*http://www.colfaxrecord.com/sports
+*http://www.thepresstribune.com/
+*/
+function _add_js_visibility_sites($rule) {
+	//print($_SERVER['HTTP_HOST']);
+	if($_SERVER['HTTP_HOST']== $rule->site_visibility){
+		
+		$site_match = TRUE;
+	}
+	else{
+		$site_match = FALSE;
+	}
+	return $site_match;
+}
+
+/**
+ * Based on visibility setting this function returns TRUE if the ADD JS 
+ * rule code should be added to the current page and otherwise FALSE.
+ *
+ * Code ported from googleanalytics.module
+ */
+
+function _add_js_visibility_pages($rule) {
+  $visibility = $rule->page_visibility;
+  $setting_pages = $rule->page_visibility_pages;
+
+//print('$setting_pages');
+  // Match path if necessary.
+  if (!empty($setting_pages)) {
+    // Convert path to lowercase. This allows comparison of the same path
+    // with different case. Ex: /Page, /page, /PAGE.
+    $pages = drupal_strtolower($setting_pages);
+    if ($visibility < 2) {
+      // Convert the Drupal path to lowercase
+      $path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
+      // Compare the lowercase internal and lowercase path alias (if any).
+      $page_match = drupal_match_path($path, $pages);
+      if ($path != $_GET['q']) {
+        $page_match = $page_match || drupal_match_path($_GET['q'], $pages);
+      }
+      // When $visibility has a value of 0, the tracking code is displayed on
+      // all pages except those listed in $pages. When set to 1, it
+      // is displayed only on those pages listed in $pages.
+      $page_match = !($visibility xor $page_match);
+    }
+    elseif (module_exists('php')) {
+      $page_match = php_eval($setting_pages);
+    }
+    else {
+      $page_match = FALSE;
+    }
+  }
+  else {
+    $page_match = TRUE;
+  }
+
+  return $page_match;
+}
+
+
+
+
+
+
+/**
+ * Helper function to get file path for a rule.
+ * This will get the path relative to DRUPAL_ROOT,
+ * as in 'sites/default/files/add_js/add_js_99.js'.
+ *
+ * @param $id
+ *   The AD JS rule unique ID
+ */
+function _add_js_rule_path($id) {
+  if (!empty($id)) {
+    $local_path = file_create_url(_add_js_rule_uri($id));
+    //Now remove the part before the drupal root.
+    $local_path = preg_replace('/^' . preg_quote($GLOBALS['base_url'], '/') . '\//', '', $local_path);
+    return $local_path;
+  }
+  return NULL;
+}
+
+/**
+ * Return the URI for a id.
+ *
+ * @param $id
+ *   The JS injector rule unique ID
+ */
+function _add_js_rule_uri($id) {
+  if (!empty($id)) {
+    return 'public://add_js/add_js_' . $id . '.js';
+  }
+}
+function add_js_page_build(&$page) {
+global $block_info;
+$i=0;
+if(isset($block_info)){
+foreach($block_info as $key => $content){
+     $page[$content[2]][$i++] = array(
+      '#markup' => $content[0],
+      '#weight' => $content[1],
+	          );
+          }
+    }
+$block_info = array(); //empty array;
+}
+
+
+
