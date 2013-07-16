@@ -1,0 +1,4 @@
+name = Marketplace Expiration
+description = Changes listing type value to Free when the contract end date is reached.
+core = 7.x
+package = Custom

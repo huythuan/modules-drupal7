@@ -1,0 +1,161 @@
+<?php
+/**
+ * Created by Thuan Nguyen.
+ * User: thuannguyen
+ * Date: April 4, 2013
+ * Time: 4:14pm
+ */
+
+/**
+ * Drupal cron check the node business listing  to see of the contract date has passed. If it has it
+ * sets the listing type to free and saves the node.
+ * And set the 'sticky at the top list' for featured and featured plus businesses to improve search result (featured and featured plus businesses should be 
+ * appear at the top of search result list)
+ *Reset 'sticky at the top list' for businesses which have contract date have passed
+ */
+
+/**
+ * Implementation of hook_cron().
+ */
+function marketplace_expiration_cron() {
+  $clear_cache = FALSE;
+  $clear_cache = marketplace_expiration_get_field();
+
+  if ($clear_cache) {
+    // Clear the cache so an anonymous poster can see any changes to nodes
+    drupal_flush_all_caches();
+  }
+}
+/**
+ * Get field_data_field_business_listing_type  where field_business_listing_type_value is not free 
+ */
+function marketplace_expiration_get_field(){
+	$update = FALSE;
+	$query = db_select('field_data_field_business_listing_type', 'fd')
+      ->fields('fd')
+      ->condition('field_business_listing_type_value','free','!=')
+      ->execute()
+      ->fetchAll();
+	 if (count($query) > 0) {
+		foreach ($query as $value) {
+				if(strtotime(marketplace_expiration_get_contract_date($value->entity_id)) < time()){
+					$update = TRUE;
+					$record = array();
+					$record['entity_type'] = $value->entity_type;
+					$record['bundle'] = $value->bundle;
+					$record['deleted'] = $value->deleted;
+					$record['entity_id'] = $value->entity_id;
+					$record['revision_id'] = $value->revision_id;
+					$record['language'] = $value->language;
+					$record['delta'] = $value->delta;
+					$record['field_business_listing_type_value'] = $value->field_business_listing_type_value;
+      				marketplace_expiration_update_type($record,'0');
+				}
+    		}		
+	   } 
+	if(marketplace_expiration_set_sticky()){
+		$update = TRUE;
+	}
+	return $update;		
+}
+/**
+ * Get contract end date
+ */
+function marketplace_expiration_get_contract_date($id){
+	$query = db_select('field_data_field_business_contract', 'fd')
+      ->fields('fd')
+      ->condition('entity_id',$id,'=')
+      ->execute()
+      ->fetchAll();
+	$node = array();
+  	if (count($query) > 0) {
+    	foreach ($query as $value) {
+			$node = $value;	
+    	}
+  	}
+  return $node->field_business_contract_value;
+}
+
+
+/**
+ * Get node where type = business listing
+ *Check the node featured and featured plus business listing  to see whether or not 'sticky at the top list' checked. If it is not checked, check it 
+ *and saves the node.
+ * Make sure if a business listing type = free, sticky at the top list should reset.
+ */
+function marketplace_expiration_set_sticky(){	
+	$update = FALSE;
+	$query = db_select('node', 'n');
+	$query->condition('n.type','business_listing','=');
+    $query->join('field_data_field_business_listing_type', 't', 'n.nid = t.entity_id'); 
+	$query->groupBy('n.nid');//GROUP BY user ID
+	//Select fields
+    $query->fields("n", array("nid", "sticky"));
+    $query->fields("t", array("field_business_listing_type_value"));
+    $results = $query->execute();
+	 if (count($results) > 0) {
+		foreach ($results as $value) {
+			//make sure every business with listing type = free has sticky at the top list = 0
+				if($value->field_business_listing_type_value =='free'){										
+					if($value->sticky =='1'){
+						$update = TRUE;
+						$record = array();
+						$record['nid'] = $value->nid;
+						$record['sticky'] = '0';		
+      			 	    marketplace_expiration_update_type($record,'1');
+                    }
+
+				}
+				
+				else{
+					//set sticky for featured and featured plus businesses, in order to improve search result
+					if($value->sticky == '0'){ 
+						$update = TRUE;
+						$record = array();
+						$record['nid'] = $value->nid;
+						$record['sticky'] = '1';			
+      			 	    marketplace_expiration_update_type($record,'2');
+					}
+					
+				}
+    		}
+		return $update;
+	} else 
+		return $update;
+	
+}
+
+
+
+
+
+/**
+ * Update field business listing type  to DB.
+ */
+function marketplace_expiration_update_type($record,$type) { 
+	switch ($type)
+	{
+		case "0":
+			$record['field_business_listing_type_value'] = 'free';
+		    drupal_write_record('field_data_field_business_listing_type', $record, 'entity_id');//updating field data field business listing type
+			drupal_write_record('field_revision_field_business_listing_type', $record, 'revision_id');//updating field revision field business listing type
+			//updating display settings view mode
+			$tmp = array();
+			$tmp['nid'] = $record['entity_id'];
+			$tmp['ds_switch'] = 'free_listing';
+			drupal_write_record('node_revision', $tmp, 'nid');//updating display settings view mode
+			watchdog('marketplace_expiration', 'Updating business listing type | node id: %replacement', array('%replacement' => $record['entity_id']));			
+			break;
+		case "1":
+			drupal_write_record('node', $record, 'nid');
+			drupal_write_record('node_revision', $record, 'nid');
+			watchdog('marketplace_expiration', 'Updating: Reset sticky at the top of list | node id: %replacement', array('%replacement' => $record['nid']));
+			break;		
+		case "2":
+			drupal_write_record('node', $record, 'nid');
+			drupal_write_record('node_revision', $record, 'nid');
+			watchdog('marketplace_expiration', 'Updating: Set sticky at the top of list | node id: %replacement', array('%replacement' => $record['nid']));
+		    break;
+		
+	}
+}
