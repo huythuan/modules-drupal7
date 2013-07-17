@@ -1,0 +1,91 @@
+<?php
+/**
+ * Created by Thuan Nguyen.
+ * User: thuannguyen
+ * Date: April 29, 2013
+ * Time: 3:40pm
+ */
+
+/**
+ * Drupal cron check the node listing  to see of the featured expiration date has passed. If it has it
+ * sets the listing type to No and saves the node.
+ */
+
+/**
+ * Implementation of hook_cron().
+ */
+function listing_featured_expiration_cron() {
+  $clear_cache = FALSE;
+  $clear_cache = _expire_listing_type();
+
+  if ($clear_cache) {
+    // Clear the cache so an anonymous poster can see any changes to nodes
+    drupal_flush_all_caches();
+  }
+}
+
+function _expire_listing_type(){
+   $result = FALSE;
+
+	$result = listing_featured_expiration_get_field();
+
+   return $result;
+}
+/**
+ * Get field_data_field_business_listing_type  where field_business_listing_type_value is not free 
+ */
+function listing_featured_expiration_get_field(){
+	$update = FALSE;
+	$query = db_select('field_data_field_featured', 'fd')
+      ->fields('fd')
+      ->condition('field_featured_value','yes','=')
+      ->execute()
+      ->fetchAll();
+	 if (count($query) > 0) {
+		foreach ($query as $value) {
+				if(strtotime(listing_featured_expiration_get_contract_date($value->entity_id)) < time()){
+					$update = TRUE;
+					$record = array();
+					$record['entity_type'] = $value->entity_type;
+					$record['bundle'] = $value->bundle;
+					$record['deleted'] = $value->deleted;
+					$record['entity_id'] = $value->entity_id;
+					$record['revision_id'] = $value->revision_id;
+					$record['language'] = $value->language;
+					$record['delta'] = $value->delta;
+					$record['field_featured_value'] = $value->field_featured_value;
+      				listing_featured_expiration_update_type($record);
+				}
+    		}
+		return $update;
+	} else 
+		return $update;
+}
+/**
+ * Get contract end date
+ */
+function listing_featured_expiration_get_contract_date($id){
+	$query = db_select('field_data_field_featured_expiration', 'fd')
+      ->fields('fd')
+      ->condition('entity_id',$id,'=')
+      ->execute()
+      ->fetchAll();
+	$node = array();
+  	if (count($query) > 0) {
+    	foreach ($query as $value) {
+			$node = $value;	
+    	}
+  	}
+  return $node->field_featured_expiration_value;
+}
+
+
+/**
+ * Update field  listing type  to DB.
+ */
+function listing_featured_expiration_update_type($record) {    
+	$record['field_featured_value'] = 'no';
+    drupal_write_record('field_data_field_featured', $record, 'entity_id');//updating field data field business listing type
+	drupal_write_record('field_revision_field_featured', $record, 'revision_id');//updating field revision field business listing type
+	watchdog('listing_featured_expiration', 'Updating listing type | node id: %replacement', array('%replacement' => $record['entity_id']));
+}

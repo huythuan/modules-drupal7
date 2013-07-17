@@ -1,0 +1,4 @@
+name = Listing Featured Expiration
+description = Changes listing featured type value to No when the featured expiration end date is reached.
+core = 7.x
+package = Custom
