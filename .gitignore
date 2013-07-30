@@ -6,4 +6,10 @@ tempfile.txt
 *.gz
 log/*.log
 log/*.log.[0-9]
-sites/default/files
+# Ignore paths that contain generated content.
+cache/
+files/
+sites/*/files
+sites/*/private
+# Ignore configuration files that may contain sensitive information.
+sites/*/*settings*.php
