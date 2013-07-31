@@ -1,0 +1,4 @@
+name = Marketplace RSS
+description = RSS for featured and featured plus businesses.
+core = 7.x
+package = Custom

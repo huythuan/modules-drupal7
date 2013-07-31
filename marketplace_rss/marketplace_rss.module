@@ -1,0 +1,123 @@
+<?php
+/**
+ * Created by Thuan Nguyen.
+ * User: thuannguyen
+ * Date: May 14, 2013
+ * Time: 2:55pm
+ */
+
+/**
+ * Create RSS feed for featured and featured plus businesses
+ */
+/**
+ * Implements hook_menu().
+ */
+function marketplace_rss_menu() {
+  	$menuitems['frss'] = array(
+	    'title' => 'My Menu',
+	    'page callback' => 'marketplace_rss_page_callback',
+	    'access callback' => TRUE,
+	    'type' => MENU_CALLBACK,
+  );
+  return $menuitems;
+}
+
+/**
+ * Generates and prints a featured and featured_plus businesses RSS feed.
+ */
+function marketplace_rss_page_callback() {
+	global $base_url,$language_content;
+	$query = db_select('node', 'n');
+	$query->condition('n.type','business_listing','=');
+    $query->join('field_data_field_business_listing_type', 't', 'n.nid = t.entity_id');
+	$query->condition('t.field_business_listing_type_value','free','!=');
+	$query->join('field_data_body', 'b', 'b.entity_id = t.entity_id');
+	$query->join('field_data_field_business_phone_number', 'p', 'p.entity_id = t.entity_id');
+	$query->groupBy('n.nid');//GROUP BY user ID
+	//Select fields
+    $query->fields("n", array("nid", "title"));
+    $query->fields("p", array("field_business_phone_number_value"));
+    $query->fields("b", array("body_value"));
+    $results = $query->execute();
+	$tmp = array();
+	if (count($results) > 0) {
+		foreach ($results as $value) {			   
+			$tmp[] = $value;
+			}
+		}
+	//get random node to feed
+	$num_feature = count($tmp);
+	$list = array_rand($tmp,$num_feature);
+
+	
+	//	put random node to the list	
+	for($i = 0;$i< $num_feature; $i++){
+	    $id = $tmp[$list[$i]]->nid;
+	    $title = $tmp[$list[$i]]->title;
+	    $title = strip_tags($title);
+	    $title = preg_replace("/[^A-Z0-9a-z.,\w ]/u", '', $title);
+		$title = trim($title);	
+		$url = marketplace_rss_get_link($id); 
+		
+		$phone = $tmp[$list[$i]]->field_business_phone_number_value;
+		$phone = strip_tags($phone);
+		$phone = preg_replace("/[^A-Z0-9a-z()-.,\w ]/u", '', $phone);
+		$phone = urldecode($phone);
+		$phone = trim($phone);
+		$description = substr($tmp[$list[$i]]->body_value,0,10000);
+		$description = strip_tags($description);
+		$description = preg_replace('/ +/', ' ', $description);
+		$description = preg_replace("/[^A-Z0-9a-z.,\w ]/u", '', $description);
+		$description = trim($description);	
+		if($description ==''){
+			$description = 'NorCal Marketplace, Local Business Directory';
+		}	
+	    $xmlBody .= '
+	<item> 	    
+	    <title>' . $title . '</title>
+		<description> '.$description.'</description>
+	    <link>' . $url . '</link>		
+		<id>' . $id . '</id> 
+		<phone>' . $phone . '</phone>
+	</item>';
+	} //
+
+      $namespaces = array('xmlns:geo' => 'http://www.w3.org/2003/01/geo/wgs84_pos#');
+	$channel= array(
+	    'version' => '2.0',
+	    'title' => t('Comments for @site_name', array('@site_name' => variable_get('site_name', 'Drupal'))),
+	    'link' => $base_url,
+	    'description' => t('Comments'),
+	    'language' => $language_content->language,
+	    'generator' => 'http://drupal.org/',
+	  );
+  	  $output = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n";
+	  $output .= "<rss version=\"" . $channel["version"] . "\" xml:base=\"" . $base_url . "\"" . drupal_attributes($namespaces) . ">\n";
+	  $output .= "<title>Featured and Featured Plus Businesses</title>\n";
+	  $output .= "<link>http://www.norcalmarketplace.com/featured-businesses</link>\n";
+	  $output .= "<description>Randomly select featured and featured plus businesses</description>\n";
+	  $output .= "<channel>\n";
+	  $output .= $xmlBody."\n";
+	  $output .= "</channel>\n";
+	  $output .= "</rss>\n";
+
+	  drupal_add_http_header('Content-Type', 'application/rss+xml; charset=utf-8');
+	  print $output;
+}
+
+
+function marketplace_rss_get_link($nid) {
+	global $base_url;
+
+	$query = db_select('url_alias', 'u');
+	$query->condition('u.source','node/'.$nid,'=');
+	$query->fields("u", array("alias"));
+	$results = $query->execute();
+	if (count($results) > 0) {
+		foreach ($results as $value) {
+				return $base_url.'/'.$value->alias;
+			}
+	}
+	return $base_url.'/node/'.$nid.'/';
+
+}
